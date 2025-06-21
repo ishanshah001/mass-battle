@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Rock Paper Scissors Simulation</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #111;
+      color: white;
+      font-family: sans-serif;
+    }
+    #controls {
+      position: fixed;
+      top: 10px;
+      left: 10px;
+      background: rgba(0, 0, 0, 0.8);
+      padding: 12px;
+      border-radius: 6px;
+      user-select: none;
+      z-index: 10;
+      max-width: 280px;
+    }
+    #controls label {
+      display: block;
+      margin: 6px 0 2px 0;
+    }
+    #info {
+      margin-top: 10px;
+    }
+    input[type=number], input[type=range] {
+      width: 100%;
+    }
+    button {
+      margin-top: 8px;
+      width: 48%;
+      padding: 8px;
+      font-size: 16px;
+      cursor: pointer;
+      border-radius: 4px;
+      border: none;
+      background-color: #444;
+      color: white;
+      transition: background-color 0.3s ease;
+    }
+    button:hover {
+      background-color: #666;
+    }
+    #winner {
+      margin-top: 10px;
+      font-weight: bold;
+      font-size: 1.2em;
+      color: #0f0;
+    }
+  </style>
+</head>
+<body>
+  <div id="controls">
+    <label id="numAgentsLabel" for="numAgentsInput">Number of Agents (10 - 1000):</label>
+    <input type="number" id="numAgentsInput" min="10" max="1000" value="500" step="50" />
+
+    <label id="speedLabel" for="speedSlider">Speed: <span id="speedValue">2</span></label>
+    <input type="range" id="speedSlider" min="0.5" max="5" step="0.1" value="1" />
+
+    <div id="buttonsWrapper" style="display:flex; justify-content:space-between;">
+      <button id="startBtn" disabled>Start</button>
+      <button id="resetBtn" disabled>Reset</button>
+    </div>
+
+    <div id="info">
+      <div>Rock: <span id="rockCount">0</span></div>
+      <div>Paper: <span id="paperCount">0</span></div>
+      <div>Scissors: <span id="scissorsCount">0</span></div>
+      <div id="winner"></div>
+    </div>
+  </div>
+
+  <canvas id="canvas"></canvas>
+
+  <script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    const TYPES = ['rock', 'paper', 'scissors'];
+    const IMAGES = {};
+    const IMAGE_SOURCES = {
+      rock: 'images/rock.jpg',      // Rock icon
+      paper: 'images/paper.jpg',     // Paper icon
+      scissors: 'images/scissor.jpg'   // Scissors icon
+    };
+
+    const winMap = {
+      rock: 'scissors',
+      scissors: 'paper',
+      paper: 'rock'
+    };
+
+    let imagesLoaded = 0;
+    let animationId = null;
+    let agents = [];
+    let speed = 2;
+    let simulationRunning = false;
+
+    // Load images
+    for (let type of TYPES) {
+      const img = new Image();
+      img.src = IMAGE_SOURCES[type];
+      img.onload = () => {
+        imagesLoaded++;
+        if (imagesLoaded === TYPES.length) {
+          startBtn.disabled = false;
+        }
+      };
+      IMAGES[type] = img;
+    }
+
+    class Agent {
+      constructor(x, y, type) {
+        this.x = x;
+        this.y = y;
+        this.vx = Math.random() * 2 - 1;
+        this.vy = Math.random() * 2 - 1;
+        this.type = type;
+        this.size = 20;
+      }
+
+      move() {
+        this.x += this.vx * speed;
+        this.y += this.vy * speed;
+
+        if (this.x < 0 || this.x > canvas.width) this.vx *= -1;
+        if (this.y < 0 || this.y > canvas.height) this.vy *= -1;
+
+        this.x = Math.max(0, Math.min(canvas.width, this.x));
+        this.y = Math.max(0, Math.min(canvas.height, this.y));
+      }
+
+      draw() {
+        ctx.drawImage(IMAGES[this.type], this.x - this.size / 2, this.y - this.size / 2, this.size, this.size);
+      }
+
+      interact(other) {
+        if (winMap[this.type] === other.type) {
+          other.type = this.type;
+        } else if (winMap[other.type] === this.type) {
+          this.type = other.type;
+        }
+      }
+    }
+
+    // UI Elements
+    const numAgentsInput = document.getElementById('numAgentsInput');
+    const speedSlider = document.getElementById('speedSlider');
+    const speedValue = document.getElementById('speedValue');
+    const startBtn = document.getElementById('startBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const rockCountSpan = document.getElementById('rockCount');
+    const paperCountSpan = document.getElementById('paperCount');
+    const scissorsCountSpan = document.getElementById('scissorsCount');
+    const winnerDiv = document.getElementById('winner');
+    const numAgentsLabel = document.getElementById('numAgentsLabel');
+    const speedLabel = document.getElementById('speedLabel');
+    const buttonsWrapper = document.getElementById('buttonsWrapper');
+
+    speedSlider.addEventListener('input', () => {
+      speed = parseFloat(speedSlider.value);
+      speedValue.innerText = speed.toFixed(1);
+    });
+
+    startBtn.addEventListener('click', () => {
+      if (simulationRunning) return;
+      const n = parseInt(numAgentsInput.value);
+      if (isNaN(n) || n < 10 || n > 1000) {
+        alert('Please enter a number between 10 and 1000');
+        return;
+      }
+      initSimulation(n);
+      simulationRunning = true;
+
+      // Hide number input and start/reset buttons, keep speed slider visible
+      numAgentsInput.style.display = 'none';
+      numAgentsLabel.style.display = 'none';
+      buttonsWrapper.style.display = 'none';
+
+      speedSlider.disabled = false;
+      speedLabel.style.display = 'block';
+
+      winnerDiv.textContent = '';
+      animate();
+
+      startBtn.disabled = true;
+      resetBtn.disabled = false;
+      numAgentsInput.disabled = true;
+    });
+
+    resetBtn.addEventListener('click', () => {
+      if (animationId) {
+        cancelAnimationFrame(animationId);
+        animationId = null;
+      }
+      simulationRunning = false;
+      agents = [];
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Show controls again
+      numAgentsInput.style.display = 'block';
+      numAgentsLabel.style.display = 'block';
+      buttonsWrapper.style.display = 'flex';
+
+      speedSlider.disabled = true;
+      winnerDiv.textContent = '';
+      rockCountSpan.textContent = '0';
+      paperCountSpan.textContent = '0';
+      scissorsCountSpan.textContent = '0';
+
+      startBtn.disabled = false;
+      resetBtn.disabled = true;
+      numAgentsInput.disabled = false;
+    });
+
+    function initSimulation(numAgents) {
+      agents = [];
+      for (let i = 0; i < numAgents; i++) {
+        const x = Math.random() * canvas.width;
+        const y = Math.random() * canvas.height;
+        const type = TYPES[Math.floor(Math.random() * 3)];
+        agents.push(new Agent(x, y, type));
+      }
+    }
+
+    function updateStats() {
+      const counts = { rock: 0, paper: 0, scissors: 0 };
+      for (const agent of agents) counts[agent.type]++;
+
+      rockCountSpan.textContent = counts.rock;
+      paperCountSpan.textContent = counts.paper;
+      scissorsCountSpan.textContent = counts.scissors;
+
+      const activeTypes = Object.keys(counts).filter(k => counts[k] > 0);
+      if (activeTypes.length === 1 && simulationRunning) {
+        winnerDiv.textContent = `${activeTypes[0].toUpperCase()} WINS!`;
+        cancelAnimationFrame(animationId);
+        simulationRunning = false;
+        resetBtn.disabled = false;
+        startBtn.disabled = true;
+      }
+    }
+
+    function checkCollisions() {
+      for (let i = 0; i < agents.length; i++) {
+        for (let j = i + 1; j < agents.length; j++) {
+          const a = agents[i];
+          const b = agents[j];
+          const dx = a.x - b.x;
+          const dy = a.y - b.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < a.size) {
+            a.interact(b);
+          }
+        }
+      }
+    }
+
+    function animate() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      for (const agent of agents) {
+        agent.move();
+        agent.draw();
+      }
+      checkCollisions();
+      updateStats();
+      if (simulationRunning) {
+        animationId = requestAnimationFrame(animate);
+      }
+    }
+
+    // Initially disable start/reset and speed slider until images load
+    startBtn.disabled = true;
+    resetBtn.disabled = true;
+    speedSlider.disabled = true;
+  </script>
+</body>
+</html>
